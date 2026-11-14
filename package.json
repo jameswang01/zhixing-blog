@@ -1,0 +1,1 @@
+{"name":"zhixing-blog","version":"0.1.0","private":true,"type":"module","scripts":{"dev":"astro dev --host 127.0.0.1","build":"astro build","preview":"astro preview"},"dependencies":{"astro":"5.7.0"},"overrides":{"rollup":"4.68.2"}}
