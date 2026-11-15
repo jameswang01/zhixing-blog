@@ -559,13 +559,13 @@ MCP 则提供一种协议，用于客户端与服务端之间发现和交互工�
 
 ### 延伸阅读：Coding Agent 源码分析
 
-以下文章由 Liuliming 撰写，适合在掌握通用概念后，结合具体版本阅读；各系统实现会随版本变化。
+以下是本站基于公开源码和官方资料整理的阅读笔记。Claude Code 一篇以官方文档为依据，其他文章均注明所读代码版本。
 
-- [Pi Agent 源码解析](https://keepkeen.github.io/blog/pi-agent-source-analysis/)
-- [OpenAI Codex 源码解析](https://keepkeen.github.io/blog/openai-codex-source-analysis/)
-- [DeepSeek Harness 源码解析](https://keepkeen.github.io/blog/deepseek-harness-source-analysis/)
-- [Claude Code 源码解析](https://keepkeen.github.io/blog/claude-code-source-analysis/)
-- [Agent Loop 与工具执行](https://keepkeen.github.io/blog/coding-agent-loop-tools/)
-- [权限、沙箱与扩展](https://keepkeen.github.io/blog/coding-agent-security-extensions/)
-- [上下文、会话、压缩与子代理](https://keepkeen.github.io/blog/coding-agent-context-session-subagents/)
-- [接口与可观测性](https://keepkeen.github.io/blog/coding-agent-interfaces-observability/)
+- [Claude Code：基于官方资料理解工作方式](https://jameswang01.github.io/zhixing-blog/posts/coding-agent-claude/)
+- [Codex：工具路由、执行与上下文压缩](https://jameswang01.github.io/zhixing-blog/posts/coding-agent-codex/)
+- [上下文、会话与压缩：长任务要保存什么](https://jameswang01.github.io/zhixing-blog/posts/coding-agent-context/)
+- [DeepSeek Harness：插件、执行循环与会话事件](https://jameswang01.github.io/zhixing-blog/posts/coding-agent-deepseek/)
+- [接入与可观测性：怎样追踪一次 Agent 任务](https://jameswang01.github.io/zhixing-blog/posts/coding-agent-interfaces/)
+- [Agent Loop 与工具执行：从三份源码看控制流](https://jameswang01.github.io/zhixing-blog/posts/coding-agent-loops/)
+- [Pi Agent：从一次请求读懂模型与工具循环](https://jameswang01.github.io/zhixing-blog/posts/coding-agent-pi/)
+- [权限与沙箱：Agent 执行风险如何分层](https://jameswang01.github.io/zhixing-blog/posts/coding-agent-security/)
