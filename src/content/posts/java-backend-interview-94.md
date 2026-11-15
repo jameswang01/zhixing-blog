@@ -1,5 +1,5 @@
 ---
-title: "Java 后端面试复习笔记：94 道题总目录"
+title: "Java 后端面试复习指南"
 description: "按七个方向浏览 Java 后端面试复习题，进入对应专题查看完整答案。"
 date: "2026-11-15"
 category: "Java 后端"
