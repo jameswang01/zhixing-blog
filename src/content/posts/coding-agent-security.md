@@ -61,3 +61,10 @@ Claude Code 的[权限](https://code.claude.com/docs/en/permissions)和[沙箱](
 ## 失败时怎么验证
 
 准备一个无敏感数据的隔离环境，分别尝试允许路径与拒绝路径、允许网络与不允许网络、确认后执行与拒绝后执行。记录产品版本、操作系统、配置及结果；如果某条行为无法稳定复现，就标记为待验证。测试不能证明所有绕过方式都不存在。
+
+
+## 一个源码细节：hook 与参数校验的先后
+
+Pi 的[实现](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L708-L770)先验证参数，再调用 `beforeToolCall`；[测试](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/test/agent-loop.test.ts#L581-L640)展示 hook 可改变已验证对象，随后工具接收到变化后的值。这里值得分析的是信任边界：扩展能做什么、谁能安装扩展、执行前是否还需要由业务服务校验。
+
+不能把这个单独测试直接称为“安全漏洞”：hook 是否可信、哪些用户能配置、工具自身是否再次检查，都需要结合具体部署。对于涉及金额、身份和资源范围的动作，最终业务服务仍应进行授权和参数校验。

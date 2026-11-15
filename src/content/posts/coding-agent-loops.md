@@ -67,3 +67,12 @@ Codex 的 [`build_tool_call`](https://github.com/openai/codex/blob/ee344ca945835
 ## 面试回答可以怎样组织
 
 用一分钟说明正常链路，再挑一个故障向下展开。例如“写操作超时”：我会先查询下游状态；如服务支持幂等，使用同一业务标识按其契约重试；若结果仍未知，就保留待确认状态，而非简单告诉用户失败。这里的幂等和查询接口属于业务设计，并非上述所有项目已经替你实现。
+
+
+## 三个测试案例怎样放在一起看
+
+- **输入完整性：**[Pi 截断测试](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/test/agent-loop.test.ts#L509-L579) 构造被长度截断的响应，断言工具未执行，并允许循环继续。
+- **并行观察：**[Codex 并发测试](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/tests/suite/tool_parallelism.rs#L117-L173) 利用两个开始标记和共同释放点，检查指定测试配置中命令确实重叠运行。
+- **执行前失败：**[DeepSeek 工具顺序测试](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/tests/tool-order.spec.ts#L102-L115) 在配置引用未知工具时，检查没有向模型适配器发送请求。
+
+这三条分别验证不同问题，**不能用来给三个产品排性能或可靠性名次**。要做横向比较，需要统一模型、工具、工作负载、权限配置与指标。

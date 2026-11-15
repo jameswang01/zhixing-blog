@@ -66,3 +66,10 @@ Codex 的[工具路由](https://github.com/openai/codex/blob/ee344ca9458351a6ea1
 ## 可落地的验证
 
 在测试环境分别于模型输出、只读工具调用、写操作提交前后触发取消；检查界面、任务状态、工具记录和下游结果是否一致。还应覆盖断线重连、重复事件和隐私脱敏。以上是测试建议，本次没有运行跨产品的对比实验。
+
+
+## 同一个任务，至少需要两种时间线
+
+[Pi 并行工具测试](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/test/agent-loop.test.ts#L721-L813)显示：执行结束事件可以按完成时间产生，而结果消息按原调用顺序排列。因此一个排障界面若只按时间展示事件，会与模型后续看到的结果顺序不同。比较时应保留调用 ID 和批次顺序。
+
+[DeepSeek 测试](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/tests/tool-order.spec.ts#L73-L100)对照会话请求头和模拟适配器接收的工具列表，示范了如何同时检查“记录了什么”和“实际发出了什么”。这些都是特定测试场景下的断言，不代表每个产品都提供相同的可观测接口。
