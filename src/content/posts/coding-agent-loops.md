@@ -1,78 +1,207 @@
 ---
-title: "Agent Loop 与工具执行：从三份源码看控制流"
-description: "比较模型调用、工具派发与循环退出的工程边界。"
+title: "Agent Loop 源码解析：从一次工具调用看清执行、失败与恢复"
+description: "沿一个库存查询案例理解 Agent 执行主线，并结合 Pi、Codex 与 DeepSeek Harness 的源码分析工具调用和故障边界。"
 date: "2026-11-15"
 category: "Agent 与 AI"
-tags: ["Coding Agent", "源码阅读", "工程实践"]
+tags: ["Agent Loop", "工具调用", "源码解析", "工程实践"]
 ---
 
-## 先确定比较范围
+> **阅读目标：** 看完这篇文章，你应该能画出一次 Agent 请求从用户输入、模型决策、工具执行到结果返回的主线，解释工具失败时有哪些分支，并用具体源码说明这些工程问题。
+>
+> **证据范围：** 本文以 Pi 的公开代码为主，补充 Codex 与 DeepSeek Harness 的局部实现。源码基线和测试链接见文末；业务案例为虚构。本文阅读了代码和测试，但没有在本次环境运行项目测试。
 
-这里对照 Pi、Codex 和 DeepSeek Harness 的公开代码，Claude Code 只采用官方行为文档。它们的代码基线分别是 `4f95fbe`、`ee344ca`、`39163dd`；不同模块的名称与能力并非一一对应。
+## 一、先从一个问题开始：查库存为什么需要循环？
 
-## 相同问题：模型提出动作之后怎么办
+假设用户问：“华东仓的 A 商品还剩多少？”系统有一个 `query_stock` 工具，可以按仓库和商品查询库存。
 
-| 环节 | 需要回答的问题 |
-| --- | --- |
-| 模型请求 | 当前请求带哪些消息和工具定义？ |
-| 结果解析 | 响应是普通文本、工具调用、错误还是被截断？ |
-| 工具执行 | 参数是否可用，动作是否允许，并行是否安全？ |
-| 结果回填 | 工具输出如何变成下一步可用的上下文？ |
-| 停止与恢复 | 用户取消、预算耗尽、错误或完成如何表达？ |
+一个可行的执行过程是：模型先理解问题，提出调用 `query_stock` 的意图；程序校验参数和用户权限，再调用库存服务；服务返回结果后，程序把结果交给模型，模型结合结果回答用户。
 
-## 三种可核对的代码入口
+```text
+用户问题
+   ↓
+模型读取上下文和可用工具
+   ↓
+模型提出工具调用意图
+   ↓
+程序校验并执行工具
+   ↓
+库存服务返回结果
+   ↓
+程序把结果加入上下文
+   ↓
+模型决定继续查询还是回答
+   ↓
+应用向用户返回结果
+```
 
-- Pi 的 `runLoop`、`executeToolCalls` 展现消息推进及工具批次分支，包含顺序和并行路径。[Pi 循环](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts)
-- Codex 的 `ToolRouter` 与 `ToolRegistry` 将工具路由、注册和并行能力查询分开；具体循环还需继续沿调用链阅读。[路由](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/src/tools/router.rs) · [注册](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/src/tools/registry.rs)
-- DeepSeek Harness 的 Agent 循环包含 turn、step 与工具集合解析等步骤，并与会话事件协作。[循环代码](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts) · [架构说明](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/docs/architecture.md)
-- Claude Code 官方资料描述收集上下文、行动和验证的反复过程，但这不足以证明其内部函数调用顺序。[官方工作方式](https://code.claude.com/docs/en/how-claude-code-works)
+这就是我们要研究的主线。**Agent Loop 的核心作用，是让模型的决策与外部工具的执行形成可控的多轮交互。** 模型可以提出下一步，但实际程序仍然负责调用工具、处理错误和执行权限约束。
 
-## 如何用于面试
+如果库存服务直接返回了足够的数据，模型可能在下一轮回答；如果返回多个仓库且用户未指定具体仓库，系统可能需要追问。这些都是设计可能性，不代表某个框架必然自动做对。
 
-画一个最小执行图，再补三个失败路径：模型参数不完整、工具请求超时、用户中途取消。每条路径说明谁发现问题、状态记录在哪里、是否允许重试，以及用户看到什么。对外部写入，恢复前还要核实副作用是否已经发生。
+### 为什么不直接让模型回答？
 
-## 未验证范围
+模型没有天然掌握库存服务的实时状态。要回答库存，应用通常需要访问可信的数据源。模型可以帮助理解用户想查什么，但“用户能否查询华东仓”“当前库存是多少”仍应分别由授权逻辑和业务服务决定。
 
-这里没有做跨产品基准测试，也不据此比较成功率、速度或成本。实际行为还取决于模型、工具、版本与配置。
+也不是每个查询都必须用 Agent。如果流程固定，程序完全可以用一次受约束的参数提取进入普通查询流程；只有在需要根据中间结果决定后续行动时，循环才更可能带来价值。
 
+## 二、把一次执行拆成六个边界
 
-## 一次工具调用，具体有哪些状态
-
-把“模型调用工具”压成一句话容易漏掉状态。以查询库存为例，至少可以区分：模型输出调用意图、程序识别调用、校验参数、权限判断、请求发出、下游返回、结果进入上下文、模型生成解释。中间任何一步失败，用户看到的都可能只是“没有回答”，但补救方式不同。
-
-| 停在哪一步 | 有什么可观察证据 | 首先要核对什么 |
+| 阶段 | 谁负责 | 应回答的问题 |
 | --- | --- | --- |
-| 解析之前 | 模型响应、结束原因 | 参数是不是被截断 |
-| 路由阶段 | 工具名、命名空间、调用 ID | 工具是否注册并对当前请求可见 |
-| 执行之前 | 校验结果、策略决定 | 参数合法不等于用户有权限 |
-| 请求途中 | 关联 ID、超时信息 | 下游是否可能已经收到请求 |
-| 返回之后 | 返回状态、数据范围 | 成功响应是否满足用户问题 |
+| 1. 理解任务 | 模型与应用 | 用户要查什么，缺少哪些条件？ |
+| 2. 提出调用 | 模型 | 应使用哪个工具，准备什么参数？ |
+| 3. 验证调用 | 应用与工具服务 | 参数是否合法、身份是否可信、用户是否有权限？ |
+| 4. 执行调用 | 工具与下游服务 | 请求是否发出，结果是成功、失败还是未知？ |
+| 5. 回填结果 | 应用 | 如何将工具结果组织成模型可理解的消息？ |
+| 6. 结束或继续 | 模型与应用 | 已有足够证据回答，还是需要继续、追问或停止？ |
 
-这些是分析维度，不表示每个产品都暴露了表中全部字段。
+这些是理解职责的划分，实际系统中的模块名和边界不一定完全一致。接下来用源码看：Pi 如何实现其中的循环，Codex 如何处理工具路由，DeepSeek Harness 如何标记执行边界。
 
-## Pi：截断和批次是明确分支
+## 三、先看 Pi：循环到底在循环什么？
 
-Pi 的 [`runLoop`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L268-L291) 在响应因长度限制截断时，不直接执行该消息中的工具调用；[`executeToolCalls`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L518-L535) 则根据批次与配置选择顺序或并行执行。两者分别处理输入完整性和执行顺序，不能相互替代。
+本节阅读的是 Pi 仓库提交 [`4f95fbe`](https://github.com/badlogic/pi-mono/tree/4f95fbe2f117d288610e937889ad03575777841c)。核心入口可以从 [`agent-loop.ts` 的 `runLoop`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L172-L325) 开始。
 
-想象模型输出一个工具参数对象但后半截未生成。即使前半截看似包含了 `region`，系统也不应凭剩余字段猜测原始意图。相反，两个完全独立的只读查询可能适合并行，但是否安全仍需要工具或宿主声明约束。
+### 1. 先处理消息，再发模型请求
 
-## Codex：调用对象与执行环境是不同层
+`runLoop` 管理当前上下文、待处理消息和上一轮完成结果。它会先把准备好的消息及排队中的消息加入上下文，然后通过 `streamAssistantResponse` 获取模型回复。
 
-Codex 的 [`build_tool_call`](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/src/tools/router.rs#L278-L349) 将响应转换为带工具名、ID 和 payload 的调用对象；[`ToolOrchestrator::run`](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/src/tools/orchestrator.rs#L125-L255) 则处理审批要求及沙箱下首次执行等步骤。这个拆分说明：能解析出调用并不代表实际动作一定被批准，更不代表已经成功。
+在 [发起模型请求的代码](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L390-L411) 中，消息可以先经过 `transformContext`，再由 `convertToLlm` 转换为模型接口使用的格式。
 
-## DeepSeek：step 前先准备当前能力
+为什么分这两步？从接口职责看，前者是对工作上下文进行变换，后者是适配模型消息格式。比如旧的工具输出可以在上下文变换阶段被裁剪，而内部消息如何转换为具体模型接口格式，是另一个问题。这是对代码职责的解释，不是对项目历史设计动机的断言。
 
-在 DeepSeek 的 [`preStep`](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts#L289-L322) 中，工具集合按当前 Agent 与模型选择解析，同时组装上下文；接着在 [`turn`](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts#L332-L390) 内形成 step 边界。排查某一次调用时，必须同时看 session 记录、运行时配置和工具集合。
+### 2. 模型回复里有工具调用，程序才进入工具阶段
 
-## 面试回答可以怎样组织
+当模型消息结束后，`runLoop` 会从消息内容中筛选工具调用。如果存在调用，就进入工具执行路径；工具结果随后被加入上下文，为后续模型请求提供信息。[查看调用筛选与结果回填](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L268-L291)
 
-用一分钟说明正常链路，再挑一个故障向下展开。例如“写操作超时”：我会先查询下游状态；如服务支持幂等，使用同一业务标识按其契约重试；若结果仍未知，就保留待确认状态，而非简单告诉用户失败。这里的幂等和查询接口属于业务设计，并非上述所有项目已经替你实现。
+回到库存例子，模型提出的调用可以抽象为：
 
+```json
+{
+  "tool": "query_stock",
+  "arguments": {
+    "warehouse": "华东仓",
+    "sku": "A"
+  }
+}
+```
 
-## 三个测试案例怎样放在一起看
+这是便于理解的示意，不是 Pi 某个接口的完整报文。程序拿到这个意图后，才需要检查工具是否存在、参数是否有效，以及具体服务的权限规则。模型输出了 `query_stock`，不代表库存服务已经被调用，更不代表用户有权查询该仓库。
 
-- **输入完整性：**[Pi 截断测试](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/test/agent-loop.test.ts#L509-L579) 构造被长度截断的响应，断言工具未执行，并允许循环继续。
-- **并行观察：**[Codex 并发测试](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/tests/suite/tool_parallelism.rs#L117-L173) 利用两个开始标记和共同释放点，检查指定测试配置中命令确实重叠运行。
-- **执行前失败：**[DeepSeek 工具顺序测试](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/tests/tool-order.spec.ts#L102-L115) 在配置引用未知工具时，检查没有向模型适配器发送请求。
+### 3. 工具执行完，为什么还要再问模型？
 
-这三条分别验证不同问题，**不能用来给三个产品排性能或可靠性名次**。要做横向比较，需要统一模型、工具、工作负载、权限配置与指标。
+工具返回的通常是结构化数据或文本，例如库存数量、更新时间和状态。将结果加入上下文之后，模型才能根据工具观察决定是直接回答，还是继续处理缺失信息。
+
+Pi 的循环在处理工具结果后，会根据是否还有工具调用、是否存在排队消息以及回调决定继续或结束。[查看循环判断](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L268-L325)
+
+需要注意：**循环结束不等于业务目标已经正确完成。** 模型可以生成一段看似完整的回答，但库存可能过期、查询范围可能错误、用户权限可能未通过。业务成功需要有自己的判定条件。
+
+## 四、模型输出的参数不完整，会发生什么？
+
+假设模型正在输出工具参数，但因为输出长度限制被截断。截断后的参数有时仍然能够解析：比如商品编号原本是一个更长的字符串，留下来的前半段仍然是合法字符串。
+
+Pi 在 `runLoop` 中对 `length` 停止原因做了单独处理：该消息中的工具调用不直接执行，而是生成错误结果。[查看实现](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L268-L280)
+
+仓库中的[对应测试](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/test/agent-loop.test.ts#L509-L579)构造了被截断的消息，并断言工具没有执行、错误结果被记录，循环随后继续。
+
+这个案例能说明：**类型合法不代表模型原本想输出的参数完整。** 但它只覆盖测试构造的停止原因；不能据此推断所有模型服务都会以同一种方式报告截断，也不能认为所有错误参数都能靠这一分支发现。
+
+## 五、一轮出现多个工具调用，能全部并行吗？
+
+考虑另一种问题：“分别查询华东仓和华南仓的库存。”如果两次查询彼此独立、都是只读操作，程序可能选择并行；如果一个调用修改了另一个调用要读取的配置，盲目并行就可能产生顺序问题。
+
+Pi 的 [`executeToolCalls`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L518-L535) 会检查配置以及当前批次中工具的执行模式：如果要求串行，或某个工具声明为顺序执行，则进入顺序路径；否则进入并行路径。
+
+这只是执行器提供的一种控制方式。一个工具是否真正适合并行，仍要结合它访问的业务资源判断：不同工具名也可能修改同一条记录；两个相同工具调用也可能只是读取不同商品。
+
+### 并行完成顺序和模型看到的顺序一样吗？
+
+Pi 的[一项测试](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/test/agent-loop.test.ts#L721-L813)刻意让第二个工具先完成。测试检查到：执行结束事件按完成顺序出现，但结果消息按原来的调用顺序排列。
+
+这对排障很有帮助：日志里先看到第二个工具结束，并不等于它先被模型提出。要还原一次执行，至少需要关联调用 ID、原始批次顺序和实际完成时间。
+
+Codex 也有一项[并发测试](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/tests/suite/tool_parallelism.rs#L117-L173)：测试让两个命令各自写下开始标记并等待共同释放，只有两个标记都出现才继续。这比只检查最终有两条结果，更能说明测试配置下两个命令确实发生了重叠。
+
+这两项测试验证的是各自代码在特定场景下的行为，不能用来给两个产品做性能排名，更不能证明所有工具并行写入都安全。
+
+## 六、参数校验通过，就可以放心执行了吗？
+
+还不够。参数校验、扩展 hook、用户权限和业务校验可能发生在不同位置。
+
+在 Pi 的 [`prepareToolCall`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L708-L770) 中，代码先校验参数，再调用可选的 `beforeToolCall`。仓库里的[测试](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/test/agent-loop.test.ts#L581-L640)展示了一个值得注意的边界：hook 修改已校验的参数对象后，工具实际接收到了修改后的值。
+
+这不应被直接解读为“发现了安全漏洞”。是否有风险，还要看 hook 由谁编写、谁能配置、工具自身是否再次校验，以及业务服务怎样授权。
+
+但它提醒我们：如果扩展点可以修改参数，就需要把扩展的信任边界纳入设计。对于仓库编号、用户身份、金额等关键字段，最终业务服务仍应按自己的契约进行验证，而不是只相信模型输出或上游一次校验。
+
+## 七、Codex 如何把“模型提出调用”和“程序执行”分开？
+
+Codex 的公开仓库中，[`ToolRouter::build_tool_call`](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/src/tools/router.rs#L278-L349)会识别不同类型的模型响应，并提取工具名称、调用 ID 与参数等信息，构造供后续处理的调用对象。
+
+可以把这部分理解成一道转换边界：**模型响应 → 运行时识别的工具调用对象**。它不是全部执行流程，也不意味着该动作已经得到授权。
+
+在另一处，[`ToolOrchestrator::run`](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/src/tools/orchestrator.rs#L125-L255)读取策略和运行环境，处理审批要求，再进入所选沙箱下的首次执行。具体工具是否走这条路径、适用哪些规则，还要继续沿对应处理器和配置追踪。
+
+从工程设计上，这让我们有机会分别回答三个问题：模型请求了什么？程序是否允许？允许之后在哪里、以什么权限执行？不能只通过某一个工具 schema 回答全部问题。
+
+## 八、DeepSeek Harness 如何标记一次执行？
+
+DeepSeek Harness 提供了另一组可以对照的概念。本节阅读提交 [`39163dd`](https://github.com/deepseek-ai/deepseek-harness/tree/39163dd30f703a79079e2d2446545cff3c453738)。
+
+在 [`preStep`](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts#L289-L322) 中，代码会认领待处理消息、获取模型选择、解析工具集合，并组装上下文；准备过程被拒绝或发生异常时，会处理已取得的工具集合资源。
+
+在后续的 [`turn` 逻辑](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts#L332-L390)中，可以看到 `turn/start` 和 `step/start` 等记录边界。
+
+这些边界有什么用？假设某次任务没有产生预期的工具调用，排查时可以先判断：任务是否开始、step 是否进入、工具集合是否解析成功、模型请求是否真正发出。先定位阶段，再进一步看具体错误，通常比把所有现象都归为“模型没调用工具”更有效。
+
+项目的[工具顺序测试](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/tests/tool-order.spec.ts#L102-L115)还覆盖了配置引用不存在工具的情况：在测试构造的场景中，没有向模型适配器发送请求，并且 turn 被关闭。这个测试的结论只适用于它覆盖的配置与代码路径。
+
+## 九、工具失败时，应该如何判断下一步？
+
+前面的源码讲的是循环和工具执行边界。到了真实业务中，还需要判断失败发生在哪个阶段、外部动作有没有生效。
+
+| 现象 | 首先要区分 | 可能的处理 |
+| --- | --- | --- |
+| 工具不存在 | 名称错误，还是工具未对当前会话开放？ | 返回明确错误，检查注册和配置 |
+| 参数不完整 | 用户没提供，还是模型漏填？ | 校验、补充上下文或询问用户 |
+| 查询成功但为空 | 确实无数据，还是筛选范围错误？ | 保留查询范围与空结果语义 |
+| 查询超时 | 请求没发出，还是服务慢？ | 按预算和服务契约决定是否重试 |
+| 写入超时 | 下游未执行，还是成功后响应丢失？ | 先查业务状态，再判断能否安全重试 |
+| 用户取消 | 后续步骤停止了吗？已发出的请求呢？ | 分别记录取消状态和外部动作状态 |
+
+这里最重要的是写操作超时。以“提交申请”为例，客户端没有收到响应，不等于申请一定失败。若下游支持通过业务请求号查询状态，应先查询；若支持幂等重试，应按其契约复用同一标识；如果结果仍无法确认，应保留未知状态并按业务流程处理。
+
+这些是通用工程设计建议，**不表示 Pi、Codex 或 DeepSeek Harness 自动替所有业务接口实现了幂等和补偿**。最终语义取决于工具及下游服务。
+
+## 十、如果面试官问，你可以怎么回答？
+
+### 问题一：Agent Loop 是什么？
+
+可以这样回答：
+
+> Agent Loop 是应用组织模型和外部能力交互的循环。模型根据当前上下文产生回复或工具调用意图，程序负责检查并执行工具，再把结果交给模型。系统根据结果、停止条件和预算决定继续还是结束。模型负责提出决策，程序负责实际执行和约束。
+
+如果面试官追问，可以继续说明工具参数校验、权限、超时、重复调用、取消和观测。具体项目中做过哪些，要以真实实现为准。
+
+### 问题二：为什么工具调用失败后不能一律重试？
+
+> 我会先区分只读查询和有副作用的写操作。查询可以根据超时与总预算决定是否重试；写操作超时后，下游可能已经成功，应优先通过业务标识查询状态，并依赖下游明确支持的幂等机制。状态不确定时，不把它简单当成失败。
+
+### 问题三：如何定位 Agent 反复调用同一个工具？
+
+> 先还原每轮工具名、参数、返回结果和任务状态，判断它是在合法分页、反复请求相同数据，还是由于错误结果无法继续。再结合步数、时间和调用预算设置停止条件。检测不能只看工具名，还要看参数和业务是否有进展。
+
+这是回答框架，不是声称某个系统已经实现了所有检测。面试里如果没有做过某项能力，可以说明这是设计思路，并解释需要怎样验证。
+
+## 十一、读完源码，还需要做什么？
+
+建议用一个最小实验把文章里的概念串起来：准备一个只读的模拟库存工具，让模型请求工具，记录每次模型输入、工具参数、工具结果及最终回答；然后分别模拟空结果、参数缺失和工具超时，观察应用怎样反馈。
+
+如果进一步加入写操作，应使用可控测试服务，并明确状态查询和幂等契约。实验中保留版本、配置和输入输出，才能区分“代码允许这样做”和“这个配置下实际发生了什么”。
+
+本文没有运行上述实验，也没有检查所有工具、插件和部署配置。源码会变化，阅读时应以链接所指向的固定提交为准；Claude Code 的内部实现未在本文中作源码结论。
+
+## 参考资料
+
+- [Pi：Agent Loop 源码](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts)与[对应测试](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/test/agent-loop.test.ts)。
+- [Codex：工具路由](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/src/tools/router.rs)、[执行编排](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/src/tools/orchestrator.rs)与[并发测试](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/tests/suite/tool_parallelism.rs)。
+- [DeepSeek Harness：Agent 循环](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts)与[工具顺序测试](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/tests/tool-order.spec.ts)。
