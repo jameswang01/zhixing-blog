@@ -34,3 +34,36 @@ tags: ["Coding Agent", "源码阅读", "工程实践"]
 ## 未验证范围
 
 这里没有做跨产品基准测试，也不据此比较成功率、速度或成本。实际行为还取决于模型、工具、版本与配置。
+
+
+## 一次工具调用，具体有哪些状态
+
+把“模型调用工具”压成一句话容易漏掉状态。以查询库存为例，至少可以区分：模型输出调用意图、程序识别调用、校验参数、权限判断、请求发出、下游返回、结果进入上下文、模型生成解释。中间任何一步失败，用户看到的都可能只是“没有回答”，但补救方式不同。
+
+| 停在哪一步 | 有什么可观察证据 | 首先要核对什么 |
+| --- | --- | --- |
+| 解析之前 | 模型响应、结束原因 | 参数是不是被截断 |
+| 路由阶段 | 工具名、命名空间、调用 ID | 工具是否注册并对当前请求可见 |
+| 执行之前 | 校验结果、策略决定 | 参数合法不等于用户有权限 |
+| 请求途中 | 关联 ID、超时信息 | 下游是否可能已经收到请求 |
+| 返回之后 | 返回状态、数据范围 | 成功响应是否满足用户问题 |
+
+这些是分析维度，不表示每个产品都暴露了表中全部字段。
+
+## Pi：截断和批次是明确分支
+
+Pi 的 [`runLoop`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L268-L291) 在响应因长度限制截断时，不直接执行该消息中的工具调用；[`executeToolCalls`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L518-L535) 则根据批次与配置选择顺序或并行执行。两者分别处理输入完整性和执行顺序，不能相互替代。
+
+想象模型输出一个工具参数对象但后半截未生成。即使前半截看似包含了 `region`，系统也不应凭剩余字段猜测原始意图。相反，两个完全独立的只读查询可能适合并行，但是否安全仍需要工具或宿主声明约束。
+
+## Codex：调用对象与执行环境是不同层
+
+Codex 的 [`build_tool_call`](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/src/tools/router.rs#L278-L349) 将响应转换为带工具名、ID 和 payload 的调用对象；[`ToolOrchestrator::run`](https://github.com/openai/codex/blob/ee344ca9458351a6ea102795fa73110ad3ede5dc/codex-rs/core/src/tools/orchestrator.rs#L125-L255) 则处理审批要求及沙箱下首次执行等步骤。这个拆分说明：能解析出调用并不代表实际动作一定被批准，更不代表已经成功。
+
+## DeepSeek：step 前先准备当前能力
+
+在 DeepSeek 的 [`preStep`](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts#L289-L322) 中，工具集合按当前 Agent 与模型选择解析，同时组装上下文；接着在 [`turn`](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts#L332-L390) 内形成 step 边界。排查某一次调用时，必须同时看 session 记录、运行时配置和工具集合。
+
+## 面试回答可以怎样组织
+
+用一分钟说明正常链路，再挑一个故障向下展开。例如“写操作超时”：我会先查询下游状态；如服务支持幂等，使用同一业务标识按其契约重试；若结果仍未知，就保留待确认状态，而非简单告诉用户失败。这里的幂等和查询接口属于业务设计，并非上述所有项目已经替你实现。
