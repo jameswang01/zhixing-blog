@@ -150,6 +150,10 @@ InnoDB 按聚簇键组织行。递增主键让新记录通常落在索引右端,
 
 ### 8 主从延迟时 如何保证写后读和业务正确性
 
+**具体过程：** 用户在主库把地址从 A 改为 B，提交成功后立即刷新；若查询被路由到尚未应用这次变更的副本，就可能仍返回 A。最直接的方案是这次关键查询回主库；如果必须查询副本，需要取得并传递对应提交的 GTID，在选定的副本等待该 GTID 执行完成，并在等待之后建立读取快照。
+
+等待超时、GTID 不可用或副本故障时要有明确回退；检查一个粗粒度延迟指标为零，不能证明这次指定写入已对该查询可见。唯一性校验、扣库存等写决策还必须靠主库约束或事务，不能只依赖读副本的结果。
+
 **理解与追问：** 用户刚修改资料后立刻查看，可以在一段时间内读取主库，或使用具备可验证位点等待能力的方案。等待超时应有降级策略，不能假定所有从库总能及时追上。
 
 先明确要求:可接受短暂旧数据的查询可读副本;订单确认等关键写后读可直接回主库。若要在副本上读到指定提交,可传递该提交的 GTID,在选定副本等待执行完成,再以新的事务或快照读取。等待失败时应回主库或明确重试。
@@ -216,7 +220,20 @@ LIMIT offset, size 通常要先扫描并丢弃 offset 条记录,偏移越大成�
 
 - 排序应稳定且唯一,例如按 created_at、id 组合排序,并以二者构造下一页条件;建立匹配过滤与排序的联合索引。仅用非唯一时间字段可能漏行或重复。
 
-- 延迟关联仍要付出扫描大偏移的成本,不是复杂度上的根治。游标分页适合前后连续翻页,但不天然支持任意跳页;并发插入、删除和排序字段变化仍须定义分页一致性规则。SELECT id, created_at, title FROM article WHERE created_at < :lastTime OR (created_at = :lastTime AND id < :lastId)ORDER BY created_at DESC, id DESC LIMIT 20;
+- 延迟关联仍要付出扫描大偏移的成本，不是复杂度上的根治。游标分页适合前后连续翻页，但不天然支持任意跳页；并发插入、删除和排序字段变化仍须定义分页一致性规则。
+
+例如按时间、ID 倒序翻到下一页（`:lastTime` 和 `:lastId` 表示需要由应用绑定的参数）：
+
+```sql
+SELECT id, created_at, title
+FROM article
+WHERE created_at < :lastTime
+   OR (created_at = :lastTime AND id < :lastId)
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+```
+
+示例假设排序字段非空，并有与过滤、排序相适应的索引；若字段允许 NULL 或存在其他过滤条件，应重新定义游标条件并结合执行计划核实。
 
 **易错提醒：** 把 offset 改为 id > 某值前,要确认主键顺序与业务排序一致。
 
@@ -261,6 +278,9 @@ LIMIT offset, size 通常要先扫描并丢弃 offset 条记录,偏移越大成�
 **追问：覆盖索引和索引下推是一回事吗？** 不是。覆盖索引指所需数据可从索引得到，减少回表；索引下推是将可用条件尽早交给存储引擎过滤。实际效果要结合计划判断。
 
 ## 参考资料
+
+- [MySQL InnoDB 锁与事务模型](https://dev.mysql.com/doc/refman/8.0/en/innodb-locking-transaction-model.html)
+- [MySQL 8.4 隔离级别](https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html)
 
 - [Java 8 ThreadPoolExecutor 文档](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ThreadPoolExecutor.html)
 - [MySQL 8.0 InnoDB 隔离级别](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html)与 [锁机制](https://dev.mysql.com/doc/refman/8.0/en/innodb-locking.html)

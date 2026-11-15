@@ -16,7 +16,7 @@ tags: ["Java", "面试准备"]
 
 ### 1 ArrayList 和 LinkedList 如何选择
 
-**理解与追问：** 例如按用户 ID 反复随机读取时，优先考虑数组连续存储；如果操作主要是两端入队出队，可比较 ArrayDeque。若需要在中间删除，即使链表修改链接很快，也要计入找到节点的遍历成本。
+**理解与追问：** 例如频繁按列表下标随机读取时，优先考虑数组连续存储；如果要按用户 ID 查找，还需要先建立 ID 到下标或对象的索引；如果操作主要是两端入队出队，可比较 ArrayDeque。若需要在中间删除，即使链表修改链接很快，也要计入找到节点的遍历成本。
 
 ArrayList 基于可扩容数组,按下标访问为 O(1),尾部追加均摊 O(1),中间插入、删除通常要移动元素,为 O(n)。LinkedList 基于双向链表,按下标定位为 O(n);只有已经定位到节点或操作首尾时,链接调整才是 O(1)。选择要结合访问方式和数据规模。
 
@@ -316,7 +316,7 @@ ThreadLocal 为当前线程关联一份变量值,JDK 8 中数据实际保存在 
 
 ### 17 CAS 原理 ABA 问题与适用边界
 
-**理解与追问：** 例如库存版本从 5 到 4 再补回 5，只比较数值时看不出中间变化。若业务只关心当前库存，ABA 未必造成问题；若必须识别期间发生过修改，则需要版本或其他状态约束。
+**理解与追问：** 例如库存数量从 5 到 4 再补回 5，只比较数值时看不出中间变化。若业务只关心当前库存，ABA 未必造成问题；若必须识别期间发生过修改，则需要版本或其他状态约束。
 
 CAS 将内存位置的当前值与预期值比较,相等才原子地写入新值,否则返回失败。调用方可重新读取并计算后重试,形成乐观更新。ABA 指值从 A 变成 B 又变回 A,比较仍成功,却遗漏了中间变化;只有业务依赖变化历史时才构成正确性问题。
 
@@ -349,6 +349,10 @@ CAS 将内存位置的当前值与预期值比较,相等才原子地写入新值
 **追问：等待很久就是死锁吗？** 不是。死锁需要等待关系形成环；慢调用或长事务也会造成等待。采集多次线程转储并还原持锁者与等待链，才能判断是否存在环。
 
 ## 参考资料
+
+- [Oracle ArrayList API](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/ArrayList.html)
+- [Oracle ConcurrentHashMap API](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ConcurrentHashMap.html)
+- [Oracle ThreadPoolExecutor API](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html)
 
 - [Java 8 ThreadPoolExecutor 文档](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ThreadPoolExecutor.html)
 - [MySQL 8.0 InnoDB 隔离级别](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html)与 [锁机制](https://dev.mysql.com/doc/refman/8.0/en/innodb-locking.html)

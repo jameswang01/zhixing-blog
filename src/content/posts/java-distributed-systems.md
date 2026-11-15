@@ -142,6 +142,10 @@ CAP 指出,网络分区发生时,系统不能同时保证线性一致性和每�
 
 ### 7 Redis 分布式锁怎样实现 边界是什么
 
+**按时间线看风险：** A 使用随机值 `a` 和 10 秒租期取得锁，在第 2 秒因进程暂停而停止工作；第 10 秒锁过期，B 用随机值 `b` 获得锁。第 12 秒 A 恢复时，原子比较后删除可以避免 A 把 B 的锁删掉，但 A 仍可能继续向业务数据库写入。
+
+因此，随机值解决的是“解锁时识别持有者”，不是“拒绝过期持有者的业务写入”。如果需要更强的保护，可以让被保护资源校验单调递增的 fencing token，或者用数据库版本、唯一约束等方式守住具体业务不变量；必须验证所有写入路径都执行该校验。
+
 **理解与追问：** 随机令牌主要防止误删别人的锁，并不能阻止超时后的旧持有者继续写下游。高正确性场景需让被保护资源校验递增令牌或业务版本，并考虑主从切换造成的锁丢失。
 
 基本做法是使用 SET lock_key 随机令牌 NX PX 租期原子获取锁,解锁时原子校验令牌再删除;令牌用于识别持有者,租期用于故障后释放。
@@ -329,6 +333,9 @@ CAP 指出,网络分区发生时,系统不能同时保证线性一致性和每�
 **追问：为什么重试会加重故障？** 多层同时重试可能将请求量乘法放大，进一步压垮慢下游。应只重试可恢复故障，统一总时限和层级，结合退避、抖动与幂等约束。
 
 ## 参考资料
+
+- [Redis 分布式锁设计](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)
+- [MySQL InnoDB 锁与事务模型](https://dev.mysql.com/doc/refman/8.0/en/innodb-locking-transaction-model.html)
 
 - [Java 8 ThreadPoolExecutor 文档](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ThreadPoolExecutor.html)
 - [MySQL 8.0 InnoDB 隔离级别](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html)与 [锁机制](https://dev.mysql.com/doc/refman/8.0/en/innodb-locking.html)

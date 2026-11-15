@@ -91,7 +91,7 @@ Cookie 是浏览器存储和发送数据的机制;Session 是服务端保存会�
 
 - HttpOnly 可降低脚本直接读取 Cookie 的风险;Cookie 自动携带的认证需考虑 CSRF,浏览器可读存储中的 Token 则需考虑被 XSS 窃取。
 
-**易错提醒：** JWT 默认签名不等于加密,Base64URL 不是加密,Token 也不一定采用 JWT。
+**易错提醒：** 常见的签名 JWT 不等于加密，Base64URL 不是加密，Token 也不一定采用 JWT。JWT 也可以按规范加密；不要接受不符合服务端安全策略的未签名令牌。
 
 **具体场景：** 网站把会话 ID 存在 Cookie，浏览器按规则自动带上；服务端再用 ID 找到 Session。若使用签名 JWT，Payload 仍可被解码，因此不能把密码等秘密直接放进去。
 
@@ -152,6 +152,9 @@ TCP 在连接内提供有序字节流,通过序列号、确认、重传和校验
 **追问：Selector 报告可读是否代表已经拿到完整消息？** 不是。就绪表示可以尝试相关 I/O，实际仍可能只读到部分字节；协议需要长度或分隔符等分帧机制。
 
 ## 参考资料
+
+- [RFC 9293：TCP](https://www.rfc-editor.org/rfc/rfc9293.html)
+- [RFC 7519：JWT](https://datatracker.ietf.org/doc/html/rfc7519.html)
 
 - [Java 8 ThreadPoolExecutor 文档](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ThreadPoolExecutor.html)
 - [MySQL 8.0 InnoDB 隔离级别](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html)与 [锁机制](https://dev.mysql.com/doc/refman/8.0/en/innodb-locking.html)

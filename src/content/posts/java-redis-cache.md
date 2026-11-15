@@ -16,7 +16,9 @@ tags: ["Java", "面试准备"]
 
 <span id="41-五种常见数据类型的底层编码是什么"></span>
 
-### 1 五种常见数据类型的底层编码是什么
+<span id="1-五种常见数据类型的底层编码是什么"></span>
+
+### 1 常见数据类型的底层编码是什么
 
 **理解与追问：** 面试时先说外部数据类型，再说明内部编码会随数据规模和版本变化。例如同样是 Hash，紧凑编码与哈希表的空间和操作特性不同，不应将某种底层结构视为永久固定。
 
@@ -70,7 +72,9 @@ Redis 结合被动过期与主动过期:访问键时若已到期,就按不存在
 
 <span id="44-常见八种内存淘汰策略如何分类"></span>
 
-### 4 常见八种内存淘汰策略如何分类
+<span id="4-常见八种内存淘汰策略如何分类"></span>
+
+### 4 Redis 内存淘汰策略如何分类
 
 **理解与追问：** 先看是否允许淘汰，再区分候选范围是全部键还是设置了过期时间的键，最后比较 LRU、LFU、随机等策略。缓存容量规划仍需结合命中率和写入失败监控。
 
@@ -134,7 +138,7 @@ Redis Cluster 把键空间划为 16384 个哈希槽,一般按 CRC16(key) mod 163
 
 - 全量同步通常由主节点生成并传输 RDB 快照,副本加载后继续处理快照生成期间及之后的增量写入;也支持无盘传输方式。复制 ID 标识数据历史,不能简单等同于进程 runid。
 
-- 复制积压缓冲用于补齐断链期间的缺又,大小可配置,应按写流量和预期断链时间估算;不要把它与副本输出缓冲或全量同步期间的增量缓冲完全混同,也不要写死为 1 MB。
+- 复制积压缓冲用于补齐断链期间缺失的数据,大小可配置,应按写流量和预期断链时间估算;不要把它与副本输出缓冲或全量同步期间的增量缓冲完全混同,也不要写死为 1 MB。
 
 - Redis 默认异步复制。WAIT 可等待一定数量副本确认,降低丢写概率,但不把整个部署变为强一致系统,也不保证所有故障场景下已确认写永不丢失。
 
@@ -257,6 +261,9 @@ Redis 的常见操作主要在内存完成,专用数据结构降低查找与修�
 **追问：Redis 快是不是因为完全单线程？** 不能归结为单一因素。内存访问、数据结构与事件驱动都影响性能；耗时命令和长脚本仍可能阻塞命令处理，其他工作是否多线程依版本配置。
 
 ## 参考资料
+
+- [Redis OBJECT ENCODING](https://redis.io/docs/latest/commands/object-encoding/)
+- [Redis 键淘汰策略](https://redis.io/docs/latest/develop/reference/eviction/)
 
 - [Java 8 ThreadPoolExecutor 文档](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ThreadPoolExecutor.html)
 - [MySQL 8.0 InnoDB 隔离级别](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html)与 [锁机制](https://dev.mysql.com/doc/refman/8.0/en/innodb-locking.html)

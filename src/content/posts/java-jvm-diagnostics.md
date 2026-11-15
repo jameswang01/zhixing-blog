@@ -188,6 +188,9 @@ G1 将堆划分为多个 Region,根据历史停顿、存活对象量和回收成
 
 ## 参考资料
 
+- [Oracle G1 调优指南](https://docs.oracle.com/en/java/javase/25/gctuning/garbage-first-garbage-collector-tuning.html)
+- [Oracle 虚拟线程指南](https://docs.oracle.com/en/java/javase/25/core/virtual-threads.html)
+
 - [Java 8 ThreadPoolExecutor 文档](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ThreadPoolExecutor.html)
 - [MySQL 8.0 InnoDB 隔离级别](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html)与 [锁机制](https://dev.mysql.com/doc/refman/8.0/en/innodb-locking.html)
 - [Redis 内存淘汰策略](https://redis.io/docs/latest/develop/reference/eviction/)

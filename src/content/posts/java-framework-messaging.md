@@ -70,6 +70,10 @@ tags: ["Java", "面试准备"]
 
 ### 3 事务未生效或没有回滚时怎样排查
 
+**用一个调用链排查：** 假设 `OrderController → OrderService.create()` 应当写订单和扣库存，但测试中抛错后订单仍存在。先确认 `OrderService` 是容器管理的 Bean，调用是否从代理进入；再确认两次写入是否使用同一个事务管理器和支持事务的数据库资源。接着核对异常是否真正离开事务方法，以及异常类型是否匹配回滚规则。
+
+如果方法把异常捕获后直接返回，代理可能看到正常返回；如果方法抛的是受检异常，默认规则通常不回滚，需按业务设置规则。Spring 6.1 起对**方法返回时已异常完成**的 `Future` 有专门处理，不能据此推断稍后在其他线程发生的失败也能回滚已结束的事务。详见 [Spring 回滚规则](https://docs.spring.io/spring-framework/reference/6.2/data-access/transaction/declarative/rolling-back.html)。
+
 **理解与追问：** 先确认调用是否经过代理、目标方法与事务管理器是否匹配，再检查异常是否被吞掉、回滚规则及是否跨线程。自调用失效指默认代理模式下绕过代理，并非所有增强模式都一样。
 
 按代理入口、事务基础设施、异常规则、资源与线程边界依次排查。先确认调用确实经过 Spring 管理的代理,再检查实际事务是否开启以及回滚条件是否满足。
@@ -405,6 +409,10 @@ KRaft 由 Kafka 的 Controller 仲裁组通过 Raft 复制元数据日志，管�
 **追问：KRaft 后 Kafka 就没有协调组件了吗？** 不是。元数据由 Kafka 控制器仲裁组管理，只是减少独立 ZooKeeper 的依赖；控制器部署、故障域和恢复仍需要运维设计。
 
 ## 参考资料
+
+- [Spring 事务注解](https://docs.spring.io/spring-framework/reference/6.2/data-access/transaction/declarative/annotations.html)
+- [Spring 事务回滚](https://docs.spring.io/spring-framework/reference/6.2/data-access/transaction/declarative/rolling-back.html)
+- [Kafka 4.0 设计文档](https://kafka.apache.org/40/design/design/)
 
 - [Java 8 ThreadPoolExecutor 文档](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ThreadPoolExecutor.html)
 - [MySQL 8.0 InnoDB 隔离级别](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html)与 [锁机制](https://dev.mysql.com/doc/refman/8.0/en/innodb-locking.html)
