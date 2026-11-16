@@ -18,7 +18,12 @@ tags: ["Java", "面试准备"]
 
 <span class="java-label java-insight">理解与追问：</span> 例如频繁按列表下标随机读取时，优先考虑数组连续存储；如果要按用户 ID 查找，还需要先建立 ID 到下标或对象的索引；如果操作主要是两端入队出队，可比较 ArrayDeque。若需要在中间删除，即使链表修改链接很快，也要计入找到节点的遍历成本。
 
-ArrayList 基于可扩容数组,按下标访问为 O(1),尾部追加均摊 O(1),中间插入、删除通常要移动元素,为 O(n)。LinkedList 基于双向链表,按下标定位为 O(n);只有已经定位到节点或操作首尾时,链接调整才是 O(1)。选择要结合访问方式和数据规模。
+两者的底层结构和访问成本不同：
+
+- **ArrayList** 基于可扩容数组。按下标访问为 `O(1)`，尾部追加均摊 `O(1)`；中间插入、删除通常要移动元素，为 `O(n)`。
+- **LinkedList** 基于双向链表。按下标定位为 `O(n)`；只有已经定位到节点或操作首尾时，调整链接才是 `O(1)`。
+
+选择要结合访问方式和数据规模。
 
 - ArrayList 扩容会分配新数组并复制元素;已知数量时可合理预估容量。
 
@@ -72,7 +77,10 @@ HashMap 没有提供并发访问保护。多个线程并发修改时,可能丢�
 
 <span class="java-label java-insight">理解与追问：</span> 可见性回答的是一个线程的写能否被另一个线程看到；互斥回答的是多个线程能否同时进入临界区。用 volatile 做停止标记可以，但库存检查和扣减这样的复合操作仍需要锁或原子方案。
 
-volatile 为变量读写提供可见性和内存顺序保证:对某个 volatile 变量的写,happens-before 后续对它的读。单次 volatile 读写具有原子性,包括 long、double;但 i++ 这种读、改、写复合操作并不原子。synchronized 则通过同一监视器互斥保护临界区,并建立解锁到后续加锁的可见性关系。
+两者提供的保证不同：
+
+- **volatile**：为变量读写提供可见性和内存顺序保证。对某个 volatile 变量的写，happens-before 后续对它的读。单次 volatile 读写具有原子性，包括 `long`、`double`；但 `i++` 这样的读、改、写复合操作并不原子。
+- **synchronized**：通过同一监视器互斥保护临界区，并建立解锁到后续加锁的可见性关系。
 
 - 所有相关访问必须遵守同一同步规则,才能保护业务不变量;两个不同锁不能互相保护。
 
@@ -90,7 +98,12 @@ volatile 为变量读写提供可见性和内存顺序保证:对某个 volatile 
 
 <span class="java-label java-insight">理解与追问：</span> 生产者和消费者可以使用同一把锁下的 notFull、notEmpty 两个条件队列。等待时用 while 重查条件：被唤醒只表示有机会再次检查，并不代表条件仍然成立。
 
-Object 的 wait、notify、notifyAll 与对象监视器配合使用;Condition 的 await、signal、signalAll 与对应 Lock 配合使用。等待会原子地释放关联锁,返回前重新获取锁。一个 Lock 可以创建多个Condition,将不同条件的等待者分组通知。
+两组方法使用的同步机制不同：
+
+- `Object` 的 `wait`、`notify`、`notifyAll` 与对象监视器配合使用。
+- `Condition` 的 `await`、`signal`、`signalAll` 与对应的 `Lock` 配合使用。
+
+等待会原子地释放关联锁，返回前重新获取锁。一个 `Lock` 可以创建多个 `Condition`，将不同条件的等待者分组通知。
 
 - 使用 ReentrantLock 的 Condition 时,await 和 signal 都应在持有对应锁时调用,并在 finally 中解锁。
 
@@ -147,13 +160,33 @@ Object 的 wait、notify、notifyAll 与对象监视器配合使用;Condition �
 
 ### 8 常见线程池与 ThreadPoolExecutor 七个参数是什么
 
-**从提交任务看七个参数如何配合：** 假设核心线程数为 2、最大线程数为 4、队列容量为 3，且已有任务均未完成：任务 1、2 分别创建核心线程；任务 3、4、5 进入队列；任务 6、7 因队列已满而触发新建线程，线程数达到 4；任务 8 仍无法入队且不能再扩容，于是执行拒绝处理器。`keepAliveTime` 与 `unit` 控制多余空闲线程的存活时间，`threadFactory` 决定如何创建线程。
+**从提交任务看参数如何配合：** 假设核心线程数为 2、最大线程数为 4、队列容量为 3，且已有任务均未完成：
+
+| 提交的任务 | 处理方式 |
+| --- | --- |
+| 任务 1、2 | 分别创建核心线程。 |
+| 任务 3、4、5 | 进入等待队列。 |
+| 任务 6、7 | 队列已满，触发新建线程，线程数达到 4。 |
+| 任务 8 | 无法入队，也不能再扩容，于是执行拒绝处理器。 |
+
+`keepAliveTime` 与 `unit` 控制多余空闲线程的存活时间，`threadFactory` 决定如何创建线程。
 
 这只是说明默认接收流程：任务一旦结束、线程退出或队列状态发生变化，实际走向也会变化；核心线程超时等配置同样会影响回收。更多边界可查 [JDK 8 ThreadPoolExecutor 文档](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ThreadPoolExecutor.html)。
 
 <span class="java-label java-insight">理解与追问：</span> 例如核心线程 4、最大线程 8、队列容量 100：先创建核心线程，再尝试排队；队列满后才可能扩容，达到上限仍无法接收时执行拒绝策略。这里要结合实际任务持续时间观察队列等待。
 
-常见工厂方法有固定线程数、单线程、缓存线程池和定时线程池。自定义 ThreadPoolExecutor 的七个参数是 corePoolSize、maximumPoolSize、keepAliveTime、unit、workQueue、threadFactory、handler。正常接收任务时通常先补足核心线程,再入队;队列不能接收时再扩容到最大线程数,仍不能接收才拒绝。
+常见工厂方法有固定线程数、单线程、缓存线程池和定时线程池。自定义 `ThreadPoolExecutor` 需要关注七个参数：
+
+| 参数 | 作用 |
+| --- | --- |
+| `corePoolSize` | 核心线程数 |
+| `maximumPoolSize` | 最大线程数 |
+| `keepAliveTime`、`unit` | 多余空闲线程的存活时间及时间单位 |
+| `workQueue` | 等待执行的任务队列 |
+| `threadFactory` | 创建线程的工厂 |
+| `handler` | 无法接收任务时的拒绝处理器 |
+
+正常接收任务时，通常先补足核心线程，再入队；队列不能接收时再扩容到最大线程数，仍不能接收才拒绝。
 
 - newFixedThreadPool、newSingleThreadExecutor 通常使用无界队列,持续过载可能造成任务堆积。
 
@@ -260,7 +293,9 @@ SPI 是服务提供者接口机制:使用方依赖服务接口,提供方按约�
 
 <span class="java-label java-insight">理解与追问：</span> 反射回答“有哪些方法、如何调用”；JavaBeans 内省进一步识别逻辑属性。比如 getName 和 setName 可以被识别为 name 属性，但字段名与属性访问器不必完全按反射字段直接映射。
 
-反射通过 Class 对象及 Method、Field、Constructor 等 API,在运行时检查类型信息并调用成员。Class 是 Java 层的类型表示,不等同于 HotSpot 内部的 InstanceKlass。JavaBeans 的Introspector 在反射等机制上识别 Bean 属性、读写方法和事件,是更高层的内省工具。
+反射通过 Class 对象及 Method、Field、Constructor 等 API,在运行时检查类型信息并调用成员。Class 是 Java 层的类型表示,不等同于 HotSpot 内部的 InstanceKlass。
+
+JavaBeans 的Introspector 在反射等机制上识别 Bean 属性、读写方法和事件,是更高层的内省工具。
 
 - getBeanInfo 返回 BeanInfo,可从 PropertyDescriptor 取得属性名及 getter、setter,适合实现属性映射等功能。
 
