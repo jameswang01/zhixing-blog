@@ -12,7 +12,9 @@ Pi 把 Agent 的一轮执行拆成模型调用、工具调用、结果回填和�
 
 ## 从用户输入到下一次模型调用
 
-入口函数 `agentLoop` 和 `agentLoopContinue` 对应新输入与继续执行；`runLoop` 管理推进过程。发送请求前，代码提供 `transformContext` 和 `convertToLlm` 两个步骤：前者可调整工作消息，后者将内部消息转换为模型接口接受的格式。两者解决的是不同的问题：整理上下文，与适配模型协议。[查看实现](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts)
+入口函数 `agentLoop` 和 `agentLoopContinue` 对应新输入与继续执行；`runLoop` 管理推进过程。
+
+发送请求前，代码提供 `transformContext` 和 `convertToLlm` 两个步骤：前者可调整工作消息，后者将内部消息转换为模型接口接受的格式。两者解决的是不同的问题：整理上下文，与适配模型协议。[查看实现](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts)
 
 可以用一条线理解：用户消息 → 工作上下文 → 转换为模型消息 → 流式接收回复 → 如有工具调用则执行并把结果加入上下文 → 再次请求模型。没有工具调用时也不代表整个任务一定成功，业务验收仍需要另外定义。
 
@@ -33,7 +35,9 @@ Pi 把 Agent 的一轮执行拆成模型调用、工具调用、结果回填和�
 
 ## 源码精读：循环什么时候继续，什么时候退出
 
-先看 [`runLoop`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L172-L325)。它维护 `currentContext`、待处理的 `pendingMessages` 和上一轮结果。外层循环在正常结束之前检查是否还有 follow-up；内层则处理模型输出、工具调用和 steering。两层循环并不表示“一次用户请求一定对应两次模型调用”：是否继续取决于工具调用、队列以及结束回调的决定。
+先看 [`runLoop`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L172-L325)。它维护 `currentContext`、待处理的 `pendingMessages` 和上一轮结果。外层循环在正常结束之前检查是否还有 follow-up；内层则处理模型输出、工具调用和 steering。
+
+两层循环并不表示“一次用户请求一定对应两次模型调用”：是否继续取决于工具调用、队列以及结束回调的决定。
 
 按代码执行顺序，可以拆成六步：
 
@@ -48,7 +52,9 @@ Pi 把 Agent 的一轮执行拆成模型调用、工具调用、结果回填和�
 
 ## 源码精读：流式消息如何进入上下文
 
-[`streamAssistantResponse`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L390-L460) 先执行可选的 `transformContext`，再调用 `convertToLlm`。流开始时它将部分 assistant message 加入上下文，收到文本、思考内容或工具调用的增量事件时更新该消息；完成或出错后，再以最终消息替换部分结果。它同时向宿主发出事件，供界面等消费者使用。
+[`streamAssistantResponse`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L390-L460) 先执行可选的 `transformContext`，再调用 `convertToLlm`。
+
+流开始时它将部分 assistant message 加入上下文，收到文本、思考内容或工具调用的增量事件时更新该消息；完成或出错后，再以最终消息替换部分结果。它同时向宿主发出事件，供界面等消费者使用。
 
 这里有两个容易混淆的点。第一，**界面上的增量展示不是多个互相独立的最终消息**；代码是在更新当前部分消息。第二，提供上下文变换扩展点，并不等于框架对每一种压缩策略都提供质量保证：如何保留目标、关键编号和权限约束，需要宿主设计并测试。
 
@@ -56,7 +62,9 @@ Pi 把 Agent 的一轮执行拆成模型调用、工具调用、结果回填和�
 
 [`executeToolCalls`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L518-L580) 会先判断：配置是否要求串行，或者当前批次是否有工具声明 `executionMode` 为 `sequential`。满足任一条件就进入顺序路径，否则进入并行路径。
 
-举个例子：模型一次要求“读取配置”和“修改同一配置”。两项工作是否允许并行，不能只看它们是否是不同工具名；如果修改动作依赖读取结果或共享文件，应该把依赖纳入执行策略。代码中的模式判断提供了控制入口，但工具作者怎样声明、宿主怎样配置，仍需逐项检查。
+举个例子：模型一次要求“读取配置”和“修改同一配置”。两项工作是否允许并行，不能只看它们是否是不同工具名；如果修改动作依赖读取结果或共享文件，应该把依赖纳入执行策略。
+
+代码中的模式判断提供了控制入口，但工具作者怎样声明、宿主怎样配置，仍需逐项检查。
 
 当模型响应因长度限制截断时，[循环会为该批工具调用生成失败结果](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L268-L280)，而不是直接执行可能不完整的参数。这是一个值得复用的边界：**JSON 勉强可解析，不代表模型原本想表达的参数已经完整。**
 
@@ -90,7 +98,9 @@ Pi 把 Agent 的一轮执行拆成模型调用、工具调用、结果回填和�
 
 [`prepareToolCall`](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/src/agent-loop.ts#L708-L770) 先准备并验证参数，再将验证后的参数传入 `beforeToolCall`，最终以该对象继续执行。[对应测试](https://github.com/badlogic/pi-mono/blob/4f95fbe2f117d288610e937889ad03575777841c/packages/agent/test/agent-loop.test.ts#L581-L640) 在 hook 中把原本通过字符串校验的值改成数字，断言工具实际接收到了修改后的值。
 
-这里体现的是**该测试覆盖的可变参数行为**：如果扩展拥有修改参数的能力，前一次校验不一定代表执行时的值仍符合 schema。它不等于证明某个部署存在可利用漏洞，也不说明 hook 来自不可信方；是否增加不可变对象或二次校验，应结合扩展信任模型和兼容性评估。
+这里体现的是**该测试覆盖的可变参数行为**：如果扩展拥有修改参数的能力，前一次校验不一定代表执行时的值仍符合 schema。
+
+它不等于证明某个部署存在可利用漏洞，也不说明 hook 来自不可信方；是否增加不可变对象或二次校验，应结合扩展信任模型和兼容性评估。
 
 ## 修改这段代码，哪些行为可能一起变化
 

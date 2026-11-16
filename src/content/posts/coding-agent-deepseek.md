@@ -12,7 +12,9 @@ DeepSeek Harness 使用 Cordis 组合能力，公开架构文档把模型适配�
 
 ## 一次任务经过哪些组件
 
-从阅读路径看，先建立会话，再由 Agent 驱动 turn 和 step；执行前解析工具集合、组装请求需要的上下文，之后进入模型和工具调用。`agent-loop/src/agent.ts` 中可以看到 `turn`、`preStep`、工具解析与请求准备等代码。[Agent 循环](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts)
+从阅读路径看，先建立会话，再由 Agent 驱动 turn 和 step；执行前解析工具集合、组装请求需要的上下文，之后进入模型和工具调用。
+
+`agent-loop/src/agent.ts` 中可以看到 `turn`、`preStep`、工具解析与请求准备等代码。[Agent 循环](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts)
 
 同一任务中，turn 可以表示一轮推进，step 可以表示更细的执行边界。具体事件和生命周期应以对应版本的类型与实现为准，不要将这些名字直接套进所有框架。
 
@@ -51,7 +53,9 @@ DeepSeek Harness 使用 Cordis 组合能力，公开架构文档把模型适配�
 
 ## turn 与 step：哪里记录了执行边界
 
-[`turn`](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts#L332-L390) 开始时向 session 追加 `turn/start`，进入 step 前追加 `step/start`；它持续检查取消信号，并处理 pre-step 决定。代码中也有关于工具结果恢复的逻辑：当 step 抛出错误时，尝试将已经观察到、尚需补记的结果写入 session。
+[`turn`](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts#L332-L390) 开始时向 session 追加 `turn/start`，进入 step 前追加 `step/start`；它持续检查取消信号，并处理 pre-step 决定。
+
+代码中也有关于工具结果恢复的逻辑：当 step 抛出错误时，尝试将已经观察到、尚需补记的结果写入 session。
 
 这能说明代码对“中断时如何保留部分执行事实”有具体处理；但不能因此声称所有外部副作用都有自动补偿或恰好一次语义。工具真正触达的数据库、支付或消息系统仍有各自边界。
 

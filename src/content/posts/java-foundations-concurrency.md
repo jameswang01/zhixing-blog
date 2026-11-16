@@ -33,7 +33,9 @@ tags: ["Java", "面试准备"]
 
 <span class="java-label java-warning">易错提醒：</span> “LinkedList 任意位置插入、删除都是 O(1)”漏算了定位节点的成本。
 
-<span class="java-label java-example">具体场景：</span> 假设订单列表有 10 万条，页面频繁读取第 5 万条：ArrayList 可通过数组下标定位；LinkedList 需沿节点遍历。若只做队列两端的添加和移除，应优先比较 ArrayDeque，而不是因为“有删除”就选链表。
+<span class="java-label java-example">具体场景：</span> 假设订单列表有 10 万条，页面频繁读取第 5 万条：ArrayList 可通过数组下标定位；LinkedList 需沿节点遍历。
+
+若只做队列两端的添加和移除，应优先比较 ArrayDeque，而不是因为“有删除”就选链表。
 
 **追问：链表插入不是 O(1) 吗？** 只有已持有目标节点或操作端点时，调整链接才是 O(1)；从下标查找节点仍是 O(n)。实际选择还要考虑数组局部性、对象分配和数据规模，用代表性负载测量。
 
@@ -90,7 +92,9 @@ HashMap 没有提供并发访问保护。多个线程并发修改时,可能丢�
 
 <span class="java-label java-warning">易错提醒：</span> 不要笼统地说“volatile 完全不保证原子性”或“synchronized 让线程不能被打断”。
 
-<span class="java-label java-example">具体场景：</span> 一个线程执行 `count++` 时可能先读取 count、加一再写回；两个线程都读到 0，最终可能只写入 1。把 count 标记 volatile 不能把三步合成一步；用 AtomicInteger 的 incrementAndGet 或在同一把锁下更新。
+<span class="java-label java-example">具体场景：</span> 一个线程执行 `count++` 时可能先读取 count、加一再写回；两个线程都读到 0，最终可能只写入 1。
+
+把 count 标记 volatile 不能把三步合成一步；用 AtomicInteger 的 incrementAndGet 或在同一把锁下更新。
 
 **追问：volatile 为什么不能保证 i++？** 它让每次读写具备相应可见性和顺序，但 i++ 由读取、计算、写回组成，两个线程可能读到同一个旧值。可用 AtomicInteger 的原子更新或统一加锁保护复合操作。
 
@@ -136,7 +140,9 @@ HashMap 没有提供并发访问保护。多个线程并发修改时,可能丢�
 
 <span class="java-label java-warning">易错提醒：</span> yield 不保证其他线程马上运行;interrupt 也不等于强制杀死线程。
 
-<span class="java-label java-example">具体场景：</span> 线程池任务在 sleep 时收到 interrupt，sleep 抛 InterruptedException 并清除中断标志。如果当前层无法决定停止策略，可清理资源后 `Thread.currentThread().interrupt()`，再退出或让上层处理。
+<span class="java-label java-example">具体场景：</span> 线程池任务在 sleep 时收到 interrupt，sleep 抛 InterruptedException 并清除中断标志。
+
+如果当前层无法决定停止策略，可清理资源后 `Thread.currentThread().interrupt()`，再退出或让上层处理。
 
 **追问：中断后任务一定停止吗？** 不一定。interrupt 是协作信号；阻塞方法可能抛异常，计算循环则需要检查标志。捕获 InterruptedException 后若无法处理，通常恢复中断标志或继续向上抛出。
 
@@ -144,7 +150,9 @@ HashMap 没有提供并发访问保护。多个线程并发修改时,可能丢�
 
 <span class="java-label java-insight">理解与追问：</span> 如果对象初始化代价很高且未必使用，静态内部类可延迟初始化；如果构造简单，饿汉式更容易维护。无论哪种实现，都要单独考虑对象内部共享状态的并发控制。
 
-常见实现包括静态成员饿汉式、静态内部类、枚举和双重检查锁。饿汉式与静态内部类利用类初始化机制保证初始化安全;静态内部类还能延迟到使用 Holder 时初始化。双重检查锁要求实例字段为 volatile,并在同步块内再次检查是否为空。
+常见实现包括静态成员饿汉式、静态内部类、枚举和双重检查锁。饿汉式与静态内部类利用类初始化机制保证初始化安全;静态内部类还能延迟到使用 Holder 时初始化。
+
+双重检查锁要求实例字段为 volatile,并在同步块内再次检查是否为空。
 
 - 双重检查中的 volatile 用于安全发布和必要的内存顺序,避免其他线程观察到未完成初始化的对象。
 
@@ -255,7 +263,9 @@ HashMap 没有提供并发访问保护。多个线程并发修改时,可能丢�
 
 <span class="java-label java-insight">理解与追问：</span> 面试中可沿 state、排队、阻塞和唤醒四步解释，而不是把 AQS 等同于一把锁。以信号量为例，state 对应许可数量；获取失败才可能排队等待。
 
-AQS 是构建锁和同步器的框架,通过原子更新的 state、等待队列及阻塞唤醒机制组织竞争,支持独占和共享模式。state 的业务含义由子类定义,不能把它统一理解成“是否有锁”。队列按先进先出组织,也不意味着所有基于 AQS 的工具自动公平。
+AQS 是构建锁和同步器的框架,通过原子更新的 state、等待队列及阻塞唤醒机制组织竞争,支持独占和共享模式。
+
+state 的业务含义由子类定义,不能把它统一理解成“是否有锁”。队列按先进先出组织,也不意味着所有基于 AQS 的工具自动公平。
 
 - ReentrantLock 用 state 表示重入次数,还要记录拥有者;同一线程可以重入,不是 state 大于零就必须阻塞。
 
@@ -267,7 +277,9 @@ AQS 是构建锁和同步器的框架,通过原子更新的 state、等待队列
 
 <span class="java-label java-warning">易错提醒：</span> AQS 字段名是 state,且“释放后唤醒”不等于被唤醒线程必然立即取得资源。
 
-<span class="java-label java-example">具体场景：</span> CountDownLatch 初始计数为 3，主线程 await；三个工作各完成一次 countDown，计数降到 0 后等待者才可继续。它的 state 表示剩余次数，而 ReentrantLock 的 state 在其实现中表示重入计数。
+<span class="java-label java-example">具体场景：</span> CountDownLatch 初始计数为 3，主线程 await；三个工作各完成一次 countDown，计数降到 0 后等待者才可继续。
+
+它的 state 表示剩余次数，而 ReentrantLock 的 state 在其实现中表示重入计数。
 
 **追问：AQS 的 state 是不是锁标志？** 它只是同步状态，具体含义由实现决定。重入锁用它表示持有次数，CountDownLatch 用它表示剩余计数；队列按顺序组织也不代表所有实现都公平。
 
@@ -285,7 +297,9 @@ SPI 是服务提供者接口机制:使用方依赖服务接口,提供方按约�
 
 <span class="java-label java-warning">易错提醒：</span> Dubbo 等框架的 SPI 扩展规则不能直接当成 JDK ServiceLoader 的规则。
 
-<span class="java-label java-example">具体场景：</span> 定义 PaymentProvider 接口，A、B 厂商分别提供实现，并在 `META-INF/services/接口全限定名` 声明。ServiceLoader 可以发现实现；应用还要决定按渠道如何选择、重复实现如何处理。
+<span class="java-label java-example">具体场景：</span> 定义 PaymentProvider 接口，A、B 厂商分别提供实现，并在 `META-INF/services/接口全限定名` 声明。
+
+ServiceLoader 可以发现实现；应用还要决定按渠道如何选择、重复实现如何处理。
 
 **追问：SPI 发现了多个实现，默认选谁？** ServiceLoader 提供发现与加载机制，业务仍需自己定义筛选、冲突和排序规则。还要确认配置路径、类加载器可见性和实现初始化失败时如何处理。
 
@@ -315,7 +329,9 @@ JavaBeans 的Introspector 在反射等机制上识别 Bean 属性、读写方法
 
 <span class="java-label java-insight">理解与追问：</span> 例如两个内容相同但分别创建的字符串，equals 可以为 true，而引用比较未必相同。自定义对象作为 HashMap 键时，加入之后再修改参与相等判断的字段，可能导致后续查找失败。
 
-基本类型的 == 比较值,引用类型的 == 比较是否指向同一对象;equals 定义逻辑相等,Object 默认仍比较对象身份。重写 equals 通常必须同时重写 hashCode,使逻辑相等对象具有相同哈希值。String 按内容比较,创建后的字符串内容不能通过正常 API 修改。
+基本类型的 == 比较值,引用类型的 == 比较是否指向同一对象;equals 定义逻辑相等,Object 默认仍比较对象身份。
+
+重写 equals 通常必须同时重写 hashCode,使逻辑相等对象具有相同哈希值。String 按内容比较,创建后的字符串内容不能通过正常 API 修改。
 
 - equals 应满足自反、对称、传递和一致性,非空对象与 null 比较应返回 false;参与相等判断的信息未变时,hashCode 应保持一致。哈希相同仍可能是不同对象,不能用哈希值代替相等判断。
 
@@ -323,7 +339,9 @@ JavaBeans 的Introspector 在反射等机制上识别 Bean 属性、读写方法
 
 <span class="java-label java-warning">易错提醒：</span> final 引用不能重新赋值,不代表它引用的任意对象都不可变;字符串内容不要用 == 判断。
 
-<span class="java-label java-example">具体场景：</span> 两个新建的 String 内容都是 `abc`：equals 按内容可为 true，引用 `==` 不一定为 true。自定义 UserKey 如果 equals 依赖 id，hashCode 也应基于相同的相等信息，且作为 Map 键时不要修改该信息。
+<span class="java-label java-example">具体场景：</span> 两个新建的 String 内容都是 `abc`：equals 按内容可为 true，引用 `==` 不一定为 true。
+
+自定义 UserKey 如果 equals 依赖 id，hashCode 也应基于相同的相等信息，且作为 Map 键时不要修改该信息。
 
 **追问：equals 相同但 hashCode 不同会怎样？** 违反约定后，哈希容器可能在不同桶查找，导致逻辑上相等的键无法按预期命中。作为键后也不要改变参与相等与哈希计算的字段。
 
@@ -351,7 +369,9 @@ JDK 8 的 ConcurrentHashMap 以数组、链表和树组织数据,空桶插入常
 
 <span class="java-label java-insight">理解与追问：</span> 典型场景是在线程池中保存请求用户信息：线程执行完请求后还会复用，因此必须在 finally 中清除。若只依赖弱引用回收，仍可能残留值或使下一次任务读到旧上下文。
 
-ThreadLocal 为当前线程关联一份变量值,JDK 8 中数据实际保存在 Thread 持有的ThreadLocalMap 内,键是 ThreadLocal 的弱引用,值是强引用。线程池工作线程长期存活,任务结束后若未清理,值可能持续被保留,也可能被后续任务错误读到,形成上下文串用。
+ThreadLocal 为当前线程关联一份变量值,JDK 8 中数据实际保存在 Thread 持有的ThreadLocalMap 内,键是 ThreadLocal 的弱引用,值是强引用。
+
+线程池工作线程长期存活,任务结束后若未清理,值可能持续被保留,也可能被后续任务错误读到,形成上下文串用。
 
 - 键失去其他强引用后可能被回收,但值不会因此立即回收;后续部分 get、set、remove 路径会清理失效项,不能依赖不确定的清理时机。即使 ThreadLocal 是静态字段,未 remove 的大对象也可能长期占用内存。
 
@@ -371,7 +391,9 @@ ThreadLocal 为当前线程关联一份变量值,JDK 8 中数据实际保存在 
 
 <span class="java-label java-insight">理解与追问：</span> 例如库存数量从 5 到 4 再补回 5，只比较数值时看不出中间变化。若业务只关心当前库存，ABA 未必造成问题；若必须识别期间发生过修改，则需要版本或其他状态约束。
 
-CAS 将内存位置的当前值与预期值比较,相等才原子地写入新值,否则返回失败。调用方可重新读取并计算后重试,形成乐观更新。ABA 指值从 A 变成 B 又变回 A,比较仍成功,却遗漏了中间变化;只有业务依赖变化历史时才构成正确性问题。
+CAS 将内存位置的当前值与预期值比较,相等才原子地写入新值,否则返回失败。调用方可重新读取并计算后重试,形成乐观更新。
+
+ABA 指值从 A 变成 B 又变回 A,比较仍成功,却遗漏了中间变化;只有业务依赖变化历史时才构成正确性问题。
 
 - AtomicStampedReference 可把引用和版本戳一起比较更新,前提是修改者遵循版本递增约定;读取引用和版本也应保持配对。版本戳不是自动防错,错误复用或回绕仍需按业务评估。
 

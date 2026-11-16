@@ -151,7 +151,9 @@ DeepSeek Harness 提供了另一组可以对照的概念。本节阅读提交 [`
 
 在后续的 [`turn` 逻辑](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/src/agent.ts#L332-L390)中，可以看到 `turn/start` 和 `step/start` 等记录边界。
 
-这些边界有什么用？假设某次任务没有产生预期的工具调用，排查时可以先判断：任务是否开始、step 是否进入、工具集合是否解析成功、模型请求是否真正发出。先定位阶段，再进一步看具体错误，通常比把所有现象都归为“模型没调用工具”更有效。
+这些边界有什么用？假设某次任务没有产生预期的工具调用，排查时可以先判断：任务是否开始、step 是否进入、工具集合是否解析成功、模型请求是否真正发出。
+
+先定位阶段，再进一步看具体错误，通常比把所有现象都归为“模型没调用工具”更有效。
 
 项目的[工具顺序测试](https://github.com/deepseek-ai/deepseek-harness/blob/39163dd30f703a79079e2d2446545cff3c453738/packages/core/agent-loop/tests/tool-order.spec.ts#L102-L115)还覆盖了配置引用不存在工具的情况：在测试构造的场景中，没有向模型适配器发送请求，并且 turn 被关闭。这个测试的结论只适用于它覆盖的配置与代码路径。
 

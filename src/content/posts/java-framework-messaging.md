@@ -52,7 +52,9 @@ tags: ["Java", "面试准备"]
 | MANDATORY | 加入当前事务 | 抛出异常 |
 | NEVER | 抛出异常 | 非事务执行 |
 
-例如外层下单事务调用另一个 Bean 的 REQUIRED 方法，内外层通常共享同一个物理事务；内层将它标记为 rollback-only 后，外层即使捕获异常，最终提交仍可能抛 `UnexpectedRollbackException`。若内层使用 REQUIRES_NEW，它可以独立提交；外层同时持有数据库连接时，还要评估内层另取连接导致的连接池压力。参考 [Spring 事务传播官方文档](https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-propagation.html)。
+例如外层下单事务调用另一个 Bean 的 REQUIRED 方法，内外层通常共享同一个物理事务；内层将它标记为 rollback-only 后，外层即使捕获异常，最终提交仍可能抛 `UnexpectedRollbackException`。
+
+若内层使用 REQUIRES_NEW，它可以独立提交；外层同时持有数据库连接时，还要评估内层另取连接导致的连接池压力。参考 [Spring 事务传播官方文档](https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-propagation.html)。
 
 - 常规命令式事务由代理拦截器调用事务管理器;连接等资源通常绑定到当前线程。普通新线程不会自动继承该事务。
 
@@ -70,9 +72,13 @@ tags: ["Java", "面试准备"]
 
 ### 3 事务未生效或没有回滚时怎样排查
 
-**用一个调用链排查：** 假设 `OrderController → OrderService.create()` 应当写订单和扣库存，但测试中抛错后订单仍存在。先确认 `OrderService` 是容器管理的 Bean，调用是否从代理进入；再确认两次写入是否使用同一个事务管理器和支持事务的数据库资源。接着核对异常是否真正离开事务方法，以及异常类型是否匹配回滚规则。
+**用一个调用链排查：** 假设 `OrderController → OrderService.create()` 应当写订单和扣库存，但测试中抛错后订单仍存在。
 
-如果方法把异常捕获后直接返回，代理可能看到正常返回；如果方法抛的是受检异常，默认规则通常不回滚，需按业务设置规则。Spring 6.1 起对**方法返回时已异常完成** 的 `Future` 有专门处理，不能据此推断稍后在其他线程发生的失败也能回滚已结束的事务。详见 [Spring 回滚规则](https://docs.spring.io/spring-framework/reference/6.2/data-access/transaction/declarative/rolling-back.html)。
+先确认 `OrderService` 是容器管理的 Bean，调用是否从代理进入；再确认两次写入是否使用同一个事务管理器和支持事务的数据库资源。接着核对异常是否真正离开事务方法，以及异常类型是否匹配回滚规则。
+
+如果方法把异常捕获后直接返回，代理可能看到正常返回；如果方法抛的是受检异常，默认规则通常不回滚，需按业务设置规则。
+
+Spring 6.1 起对**方法返回时已异常完成** 的 `Future` 有专门处理，不能据此推断稍后在其他线程发生的失败也能回滚已结束的事务。详见 [Spring 回滚规则](https://docs.spring.io/spring-framework/reference/6.2/data-access/transaction/declarative/rolling-back.html)。
 
 <span class="java-label java-insight">理解与追问：</span> 先确认调用是否经过代理、目标方法与事务管理器是否匹配，再检查异常是否被吞掉、回滚规则及是否跨线程。自调用失效指默认代理模式下绕过代理，并非所有增强模式都一样。
 
@@ -125,7 +131,9 @@ tags: ["Java", "面试准备"]
 
 Spring 在允许循环引用时,可通过提前暴露 Bean 引用,解决一部分单例属性注入循环依赖。构造器形成的完整闭环通常在实例尚未创建时就互相等待,无法按这一机制处理。
 
-- 一级缓存 singletonObjects 保存完成创建的单例;二级 earlySingletonObjects 保存早期引用;三级singletonFactories 保存产生早期引用的工厂。
+- **一级缓存 `singletonObjects`**：保存完成创建的单例。
+- **二级缓存 `earlySingletonObjects`**：保存早期引用。
+- **三级缓存 `singletonFactories`**：保存产生早期引用的工厂。
 
 - 典型流程:A 实例化后放入早期引用工厂;A 注入 B;B 创建并依赖 A 时取到 A 的早期引用;B 完成后回填 A,最终 A 完成创建。早期引用可能需要与 AOP 代理协调。
 
@@ -230,7 +238,13 @@ Spring 的 singleton 表示同一容器内同一 Bean 定义通常共享一个�
 
 Spring AOP 在符合切点的方法调用外建立代理拦截链,将日志、事务等横切逻辑与业务代码分开。调用进入代理后,按配置执行通知并推进到目标方法,再沿调用链返回;异常也会影响后续通知路径。
 
-- Before 在目标调用前执行;AfterReturning 针对正常返回;AfterThrowing 针对匹配异常;After 具有 finally 语义。Around 可通过 proceed 决定是否及何时继续调用,并处理返回值和异常。
+常见通知的执行时机不同：
+
+- **Before**：在目标调用前执行。
+- **AfterReturning**：针对正常返回执行。
+- **AfterThrowing**：针对匹配的异常执行。
+- **After**：具有 `finally` 语义。
+- **Around**：可通过 `proceed` 决定是否及何时继续调用，并处理返回值和异常。
 
 - 多切面的嵌套由优先级等规则控制,进入与退出方向相反。Spring 代理 AOP 主要面向方法执行,和可支持更多连接点的 AspectJ 织入机制有区别。
 
@@ -413,7 +427,9 @@ Kafka 事务把跨分区写入作为一个提交或中止的整体;用于消费�
 
 <span class="java-label java-insight">理解与追问：</span> KRaft 使用 Kafka 自身的控制器和元数据日志来管理集群元数据。迁移和支持状态应以具体 Kafka 版本的官方文档为准，不能默认现有集群可直接无风险切换。
 
-KRaft 由 Kafka 的 Controller 仲裁组通过 Raft 复制元数据日志，管理集群元数据。Apache Kafka 4.0 起服务端仅支持 KRaft，ZooKeeper 模式已移除；现有 ZooKeeper 集群需要按其源版本的受支持路径先迁移，不能直接假定升级后可继续使用。详见 [Kafka 4.0 发布说明](https://kafka.apache.org/blog/2025/03/18/apache-kafka-4.0.0-release-announcement/)。
+KRaft 由 Kafka 的 Controller 仲裁组通过 Raft 复制元数据日志，管理集群元数据。
+
+Apache Kafka 4.0 起服务端仅支持 KRaft，ZooKeeper 模式已移除；现有 ZooKeeper 集群需要按其源版本的受支持路径先迁移，不能直接假定升级后可继续使用。详见 [Kafka 4.0 发布说明](https://kafka.apache.org/blog/2025/03/18/apache-kafka-4.0.0-release-announcement/)。
 
 - Controller 负责 Broker 注册、分区与副本元数据等管理,Broker 主要处理业务数据;控制面与数据面承担不同职责。
 
