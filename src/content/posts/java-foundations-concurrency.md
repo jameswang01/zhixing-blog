@@ -108,7 +108,12 @@ Object 的 wait、notify、notifyAll 与对象监视器配合使用;Condition �
 
 <span class="java-label java-insight">理解与追问：</span> 当任务收到中断时，需要检查中断或响应阻塞方法抛出的异常并清理资源。不能把 interrupt 当成强制终止；持有的锁也要通过 finally 正确释放。
 
-sleep 暂停当前线程一段时间,不释放它持有的监视器;yield 只是向调度器提示愿意让出执行机会,可能被忽略;t.join() 让调用线程等待 t 终止;interrupt 是协作式中断请求,具体反应取决于线程正在执行什么以及是否检查中断。
+这四个方法的作用不同：
+
+- **`sleep`**：暂停当前线程一段时间，不释放它持有的监视器。
+- **`yield`**：提示调度器当前线程愿意让出执行机会，该提示可能被忽略。
+- **`t.join()`**：让调用线程等待线程 `t` 终止。
+- **`interrupt`**：发出协作式中断请求；具体反应取决于线程正在执行什么，以及是否检查中断。
 
 - sleep、join、wait 等可中断等待抛出 InterruptedException 时会清除中断标志;无法继续处理时通常应恢复标志或向上传播。
 
@@ -168,7 +173,14 @@ sleep 暂停当前线程一段时间,不释放它持有的监视器;yield 只是
 
 <span class="java-label java-insight">理解与追问：</span> 支付等不能静默丢弃的任务，应让提交方感知拒绝并选择限流、落库或可靠重试。CallerRunsPolicy 虽然能够向提交端施加压力，但调用线程可能是重要的网络事件线程，应先评估阻塞影响。
 
-ThreadPoolExecutor 在关闭后或容量饱和无法接收任务时触发拒绝处理。AbortPolicy 抛出RejectedExecutionException;DiscardPolicy 直接丢弃;DiscardOldestPolicy 在未关闭时移除队头任务并重试;CallerRunsPolicy 在未关闭时让提交任务的调用者线程直接执行。
+`ThreadPoolExecutor` 关闭后，或容量饱和而无法接收任务时，会触发拒绝处理。四种内置策略分别是：
+
+| 拒绝策略 | 如何处理任务 |
+| --- | --- |
+| `AbortPolicy` | 抛出 `RejectedExecutionException`，让提交方感知拒绝。 |
+| `DiscardPolicy` | 直接丢弃任务。 |
+| `DiscardOldestPolicy` | 线程池未关闭时，移除队头任务，再尝试提交当前任务。 |
+| `CallerRunsPolicy` | 线程池未关闭时，由提交任务的调用者线程直接执行。 |
 
 - CallerRuns 的调用者可能是请求线程、消息消费线程或另一个工作线程,并不固定是 main 线程;线程池关闭后它也会丢弃任务。
 
@@ -186,7 +198,13 @@ ThreadPoolExecutor 在关闭后或容量饱和无法接收任务时触发拒绝�
 
 <span class="java-label java-insight">理解与追问：</span> 服务关闭时可先停止接收新流量，调用 shutdown，再等待任务完成；超时后是否 shutdownNow，要结合任务可中断性与补偿方案。还应确认未开始的排队任务如何处理。
 
-五种状态是 RUNNING、SHUTDOWN、STOP、TIDYING、TERMINATED。RUNNING 接收并处理任务;SHUTDOWN 不接收新任务但处理已入队任务;STOP 不再处理队列任务并尝试中断工作线程;所有任务结束且工作线程数为零后进入 TIDYING,执行终止钩子后进入 TERMINATED。
+线程池有五种状态：
+
+- **`RUNNING`**：接收并处理任务。
+- **`SHUTDOWN`**：不接收新任务，但继续处理已入队任务。
+- **`STOP`**：不再处理队列任务，并尝试中断工作线程。
+- **`TIDYING`**：所有任务结束、工作线程数为零后进入该状态，执行终止钩子。
+- **`TERMINATED`**：终止钩子执行完毕后的最终状态。
 
 - shutdown 发起有序关闭;shutdownNow 尝试中断执行中的任务并返回尚未开始的排队任务。
 
